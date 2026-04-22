@@ -1,4 +1,5 @@
 from app.core.config import get_settings
+from app.providers.eastmoney import eastmoney_provider
 from app.schemas.fund import (
     FundHistoryPoint,
     FundHistoryResponse,
@@ -14,27 +15,28 @@ class FundService:
         self._source = get_settings().default_data_source
 
     def search(self, keyword: str) -> FundSearchResponse:
-        sample_items = [
-            FundSearchItem(code="161725", name="招商中证白酒指数", fund_type="index"),
-            FundSearchItem(code="163406", name="兴全合润混合", fund_type="mixed"),
-            FundSearchItem(code="110022", name="易方达消费行业股票", fund_type="equity"),
-        ]
         items = [
-            item
-            for item in sample_items
-            if keyword in item.code or keyword.lower() in item.name.lower()
+            FundSearchItem(
+                code=item.code,
+                name=item.name,
+                fund_type=item.fund_type,
+            )
+            for item in eastmoney_provider.search_funds(keyword=keyword)
         ]
-        return FundSearchResponse(keyword=keyword, source=self._source, items=items)
+        return FundSearchResponse(keyword=keyword, source="eastmoney", items=items)
 
     def get_realtime(self, code: str) -> FundRealtimeResponse:
+        realtime = eastmoney_provider.fetch_fund_realtime(code=code)
         return FundRealtimeResponse(
             data=FundRealtimeData(
-                code=code,
-                name="Mock Fund",
-                nav=1.2345,
-                nav_date="2026-04-22",
-                change_percent=0.82,
-                source=self._source,
+                code=realtime.code,
+                name=realtime.name,
+                fund_type=realtime.fund_type,
+                nav=realtime.nav,
+                nav_date=realtime.nav_date,
+                change_percent=realtime.change_percent,
+                value_kind=realtime.value_kind,
+                source="eastmoney",
             )
         )
 
@@ -44,16 +46,24 @@ class FundService:
         start_date: str | None,
         end_date: str | None,
     ) -> FundHistoryResponse:
+        history = eastmoney_provider.fetch_fund_history(
+            code=code,
+            start_date=start_date,
+            end_date=end_date,
+        )
         points = [
-            FundHistoryPoint(date="2026-04-18", nav=1.2100, accumulated_nav=2.5100),
-            FundHistoryPoint(date="2026-04-19", nav=1.2180, accumulated_nav=2.5180),
-            FundHistoryPoint(date="2026-04-20", nav=1.2250, accumulated_nav=2.5250),
-            FundHistoryPoint(date="2026-04-21", nav=1.2280, accumulated_nav=2.5280),
-            FundHistoryPoint(date="2026-04-22", nav=1.2345, accumulated_nav=2.5345),
+            FundHistoryPoint(
+                date=point.date,
+                unit_nav=point.unit_nav,
+                accumulated_nav=point.accumulated_nav,
+            )
+            for point in history.points
         ]
         return FundHistoryResponse(
-            code=code,
-            source=self._source,
+            fund_code=history.code,
+            fund_name=history.name,
+            fund_type=history.fund_type,
+            source="eastmoney",
             start_date=start_date,
             end_date=end_date,
             points=points,
@@ -61,4 +71,3 @@ class FundService:
 
 
 fund_service = FundService()
-

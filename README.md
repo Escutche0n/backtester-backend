@@ -11,6 +11,12 @@ This repo focuses on a small, deployable JSON backend:
 
 It intentionally avoids heavy platform architecture, user systems, and microservices.
 
+Current v1 target:
+
+- input a fund code
+- fetch fund history from Eastmoney
+- return clean JSON with fund metadata and historical nav points
+
 ## Stack
 
 - Python 3.11+
@@ -24,9 +30,12 @@ It intentionally avoids heavy platform architecture, user systems, and microserv
 app/
   api/routes/         HTTP route handlers
   core/               config and shared settings
+  providers/          upstream data providers
   schemas/            request and response models
-  services/           business logic and mock data providers
+  services/           business logic
   main.py             FastAPI entrypoint
+scripts/
+  backup_git.sh       commit and push helper
 ```
 
 ## Quick Start
@@ -75,7 +84,109 @@ uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
 - `GET /api/fund/history`
 - `POST /api/portfolio/history`
 
-Current implementations are mock-first placeholders with stable response shapes so the data layer can evolve without rewriting the API contract.
+Current status:
+
+- `GET /api/fund/search` uses Eastmoney search upstream
+- `GET /api/fund/realtime` uses Eastmoney realtime upstream with fallback to latest confirmed unit nav
+- `GET /api/fund/history` uses Eastmoney history upstream
+- `POST /api/portfolio/history` is still a mock implementation
+
+## Fund History JSON
+
+Example request:
+
+```bash
+curl --noproxy '*' "http://127.0.0.1:8000/api/fund/history?code=161725&start_date=2024-01-01&end_date=2024-01-05"
+```
+
+Example response:
+
+```json
+{
+  "fund_code": "161725",
+  "fund_name": "招商中证白酒指数(LOF)A",
+  "fund_type": "指数型-股票",
+  "source": "eastmoney",
+  "start_date": "2024-01-01",
+  "end_date": "2024-01-05",
+  "points": [
+    {
+      "date": "2024-01-02",
+      "unit_nav": 0.9201,
+      "accumulated_nav": 2.6362
+    },
+    {
+      "date": "2024-01-03",
+      "unit_nav": 0.9159,
+      "accumulated_nav": 2.6320
+    }
+  ]
+}
+```
+
+Response fields:
+
+- `fund_code`: fund code
+- `fund_name`: fund name
+- `fund_type`: fund type from Eastmoney search metadata
+- `date`: nav date
+- `unit_nav`: unit nav
+- `accumulated_nav`: accumulated nav
+
+`fund_type` is resolved with this priority:
+
+1. `fundBaseInfo.fundTypeDescription`
+2. `categoryDescription`
+3. fallback to `"基金"`
+
+The current provider also accepts the uppercase field names returned by the live Eastmoney API.
+
+## Fund Realtime JSON
+
+Example request:
+
+```bash
+curl --noproxy '*' "http://127.0.0.1:8000/api/fund/realtime?code=006195"
+```
+
+Example response:
+
+```json
+{
+  "data": {
+    "code": "006195",
+    "name": "国金量化多因子股票A",
+    "fund_type": "股票型",
+    "nav": 3.5202,
+    "nav_date": "2026-04-22 15:00",
+    "change_percent": 1.32,
+    "value_kind": "estimated",
+    "source": "eastmoney"
+  }
+}
+```
+
+Realtime notes:
+
+- `value_kind = "estimated"` means intraday estimated nav
+- `value_kind = "unit_nav"` means the realtime upstream failed or had no estimate, so the service fell back to the latest confirmed unit nav
+- `change_percent` is only present for estimated values
+
+## Local Testing Notes
+
+If `curl` hangs or shows no response, check whether your shell is forcing a local proxy.
+
+Test health:
+
+```bash
+curl --noproxy '*' "http://127.0.0.1:8000/health"
+```
+
+If needed, clear proxy variables for the current shell:
+
+```bash
+unset http_proxy https_proxy HTTP_PROXY HTTPS_PROXY
+```
 
 ## Environment Variables
 
@@ -88,6 +199,33 @@ Key variables:
 - `APP_PORT`: bind port
 - `API_PREFIX`: API path prefix, default `/api`
 - `DEFAULT_DATA_SOURCE`: current default provider label
+
+## Upstream Notes
+
+Current upstream endpoints used by this repo:
+
+- search: `https://fundsuggest.eastmoney.com/FundSearch/api/FundSearchAPI.ashx`
+- realtime: `https://fundgz.1234567.com.cn/js/<fund_code>.js`
+- history: `https://fundf10.eastmoney.com/F10DataApi.aspx`
+
+Important boundary:
+
+- this repo currently uses website-facing Eastmoney / Tiantian Fund endpoints
+- I did not find official public developer API documentation that explicitly authorizes these endpoints for third-party product integration
+- I did find public legal / service pages for Eastmoney, but not a clear "open API" statement covering the JSON / JSONP endpoints used here
+
+That means:
+
+- treat these upstreams as unofficial website endpoints rather than stable public APIs
+- expect upstream format changes, rate limits, anti-bot controls, or availability changes
+- avoid representing this project as an officially supported Eastmoney API client
+- if you later publish or commercialize this backend, re-check terms, copyright, attribution, and data usage constraints before broader rollout
+
+Relevant public pages reviewed:
+
+- Eastmoney legal disclaimer: [about.eastmoney.com/home/disclaimer](https://about.eastmoney.com/home/disclaimer)
+- Eastmoney site homepage: [www.eastmoney.com](https://www.eastmoney.com/)
+- Tiantian Fund homepage: [fund.eastmoney.com](https://fund.eastmoney.com/)
 
 ## Deploying To Tencent Cloud Lighthouse
 
@@ -107,4 +245,18 @@ Suggested production layout:
 - reverse proxy: `nginx`
 - process manager: `systemd`
 
-When you are ready, the next step is wiring real fund data providers into `app/services/`.
+## Git Backup Helper
+
+This repo includes a small helper script for fast local backup to GitHub:
+
+```bash
+./scripts/backup_git.sh "update history endpoint"
+```
+
+It runs:
+
+- `git add .`
+- `git commit -m "..."`
+- `git push`
+
+Use it only when you want to back up the current working tree as-is.
