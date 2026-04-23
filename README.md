@@ -89,6 +89,7 @@ Current status:
 - `GET /api/fund/search` uses Eastmoney search upstream
 - `GET /api/fund/realtime` uses Eastmoney realtime upstream with fallback to latest confirmed unit nav
 - `GET /api/fund/history` uses Eastmoney history upstream
+- `POST /api/portfolio/realtime` calculates estimated intraday portfolio profit/loss from holdings and fund realtime data
 - `POST /api/portfolio/history` is still a mock implementation
 
 ## Fund History JSON
@@ -171,6 +172,62 @@ Realtime notes:
 - `value_kind = "estimated"` means intraday estimated nav
 - `value_kind = "unit_nav"` means the realtime upstream failed or had no estimate, so the service fell back to the latest confirmed unit nav
 - `change_percent` is only present for estimated values
+
+## Portfolio Realtime JSON
+
+This endpoint is designed for personal Shortcuts / mobile usage.
+
+Example request:
+
+```bash
+curl --noproxy '*' \
+  -X POST "http://127.0.0.1:8000/api/portfolio/realtime" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "holdings": [
+      {"fund_code": "006195", "shares": 1000},
+      {"fund_code": "008163", "shares": 2000}
+    ]
+  }'
+```
+
+Example response:
+
+```json
+{
+  "summary": {
+    "base_value": 5645.6,
+    "estimated_value": 5662.0,
+    "estimated_profit": 16.4,
+    "estimated_return": 0.002905
+  },
+  "items": [
+    {
+      "fund_code": "006195",
+      "fund_name": "国金量化多因子股票A",
+      "fund_type": "股票型",
+      "shares": 1000.0,
+      "base_date": "2026-04-22",
+      "base_nav": 3.5038,
+      "estimated_time": "2026-04-22 15:00",
+      "estimated_nav": 3.5202,
+      "value_kind": "estimated",
+      "base_value": 3503.8,
+      "estimated_value": 3520.2,
+      "estimated_profit": 16.4,
+      "estimated_return": 0.004681
+    }
+  ],
+  "disclaimer": "估算结果仅供个人记录，不代表确认净值或投资建议。"
+}
+```
+
+Portfolio calculation:
+
+- `base_value = shares * latest confirmed unit nav`
+- `estimated_value = shares * realtime nav`
+- `estimated_profit = estimated_value - base_value`
+- `estimated_return = estimated_profit / base_value`
 
 ## Local Testing Notes
 

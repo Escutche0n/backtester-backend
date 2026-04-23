@@ -26,3 +26,40 @@ class PortfolioHistoryResponse(BaseModel):
     points: list[PortfolioHistoryPoint]
     warnings: list[str] = []
 
+
+class PortfolioRealtimeHolding(BaseModel):
+    fund_code: str = Field(min_length=1)
+    shares: float = Field(gt=0)
+
+
+class PortfolioRealtimeRequest(BaseModel):
+    holdings: list[PortfolioRealtimeHolding] = Field(min_length=1)
+
+
+class PortfolioRealtimeItem(BaseModel):
+    fund_code: str
+    fund_name: str
+    fund_type: str
+    shares: float
+    base_date: str
+    base_nav: float
+    estimated_time: str
+    estimated_nav: float
+    value_kind: str
+    base_value: float
+    estimated_value: float
+    estimated_profit: float
+    estimated_return: float
+
+
+class PortfolioRealtimeSummary(BaseModel):
+    base_value: float
+    estimated_value: float
+    estimated_profit: float
+    estimated_return: float
+
+
+class PortfolioRealtimeResponse(BaseModel):
+    summary: PortfolioRealtimeSummary
+    items: list[PortfolioRealtimeItem]
+    disclaimer: str
