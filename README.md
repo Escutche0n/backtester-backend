@@ -84,6 +84,10 @@ uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
 - `GET /api/fund/history`
 - `POST /api/portfolio/history`
 
+Full API usage guide:
+
+- `docs/API_USAGE.md`
+
 Current status:
 
 - `GET /api/fund/search` uses Eastmoney search upstream
